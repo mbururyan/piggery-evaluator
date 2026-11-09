@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "190104502743",
+    "project_id": "piggery-evaluator",
+    "storage_bucket": "piggery-evaluator.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:190104502743:android:3a0b93789d2c51619c4b92",
+        "android_client_info": {
+          "package_name": "ke.co.farmerschoice.piggeryevaluator"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqghCPeOOwWQkVUAvWLYFdu2-AT9tzmT0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
