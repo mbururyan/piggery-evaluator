@@ -4,8 +4,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 /// The G1 logo: red pig head inside viewfinder brackets, on a white tile.
 ///
 /// On white screens (splash, login) the tile blends into the page, so only
-/// the head and brackets show. That's intended. Don't put it on AppColors.page:
-/// the off-white page would show the tile's edge as a faint square.
+/// the head and brackets show. That's intended. On the off-white page colour
+/// the tile shows as a soft white square, which is fine inside a card (the
+/// drawer profile) but looks like a mistake floating on its own.
 class G1Mark extends StatelessWidget {
   const G1Mark({super.key, this.size = 64});
 

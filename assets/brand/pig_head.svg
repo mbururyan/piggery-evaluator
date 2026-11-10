@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 5 84 84">
+  <!-- Single-colour pig head cut from G1, for the Visits nav icon.
+       Colour is applied in Flutter (ColorFilter), so it can be muted or red. -->
+  <path fill="#000000" d="M20 36 L12 8 L42 26 Z M80 36 L88 8 L58 26 Z"/>
+  <!-- One evenodd path: head, then eyes and snout punched out as holes,
+       then the nostrils filled back in inside the snout hole. -->
+  <path fill="#000000" fill-rule="evenodd" d="
+    M26 26 L74 26 L86 50 L74 86 L26 86 L14 50 Z
+    M30 42 L44 47 L32 51 Z
+    M70 42 L56 47 L68 51 Z
+    M33 68 A17 11.5 0 1 0 67 68 A17 11.5 0 1 0 33 68 Z
+    M40.8 68 A3.2 5.5 0 1 0 47.2 68 A3.2 5.5 0 1 0 40.8 68 Z
+    M52.8 68 A3.2 5.5 0 1 0 59.2 68 A3.2 5.5 0 1 0 52.8 68 Z"/>
+</svg>
