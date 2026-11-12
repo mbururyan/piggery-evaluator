@@ -5,7 +5,7 @@ import '../constants/app_info.dart';
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/g1_mark.dart';
+import '../widgets/app_logo.dart';
 import 'main_shell.dart';
 import 'signup_screen.dart';
 
@@ -98,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // --- Header: the splash mark, smaller ---
-                    const Center(child: G1Mark(size: 72)),
+                    const Center(child: AppLogo(size: 72)),
                     const SizedBox(height: 12),
                     const Text(
                       AppInfo.name,

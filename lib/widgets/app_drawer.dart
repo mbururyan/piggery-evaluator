@@ -6,7 +6,7 @@ import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/snackbars.dart';
-import 'g1_mark.dart';
+import 'app_logo.dart';
 import 'role_pill.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -95,7 +95,7 @@ class AppDrawer extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const G1Mark(size: 44),
+                  const AppLogo(size: 44),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -154,7 +154,7 @@ class AppDrawer extends StatelessWidget {
                   context: context,
                   applicationName: AppInfo.name,
                   applicationVersion: 'v${AppInfo.version}',
-                  applicationIcon: const G1Mark(size: 48),
+                  applicationIcon: const AppLogo(size: 48),
                   applicationLegalese: AppInfo.tagline,
                 );
               },

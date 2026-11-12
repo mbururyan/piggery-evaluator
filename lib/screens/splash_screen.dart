@@ -4,7 +4,7 @@ import '../constants/app_info.dart';
 import '../services/auth_service.dart';
 import '../services/session_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/g1_mark.dart';
+import '../widgets/app_logo.dart';
 import 'login_screen.dart';
 import 'main_shell.dart';
 
@@ -54,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const G1Mark(size: 108),
+            const AppLogo(size: 108),
             const SizedBox(height: 20),
             const Text(
               AppInfo.name,
