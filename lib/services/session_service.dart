@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'auth_service.dart';
+import 'sync_service.dart';
 
 /// The signed-in user, as this phone knows them.
 class UserProfile {
@@ -66,21 +67,31 @@ class SessionService {
           .doc(user.uid)
           .get();
       final d = doc.data();
-      if (d == null) return;
-
-      _profile = UserProfile(
-        uid: user.uid,
-        fullName: d['full_name'] as String? ?? 'Extension officer',
-        username: d['username'] as String? ?? '',
-        phone: d['phone'] as String? ?? '',
-        role: d['role'] as String? ?? 'eo',
-      );
+      // No early return here: sync must still start below even when the
+      // profile doc is missing.
+      if (d != null) {
+        _profile = UserProfile(
+          uid: user.uid,
+          fullName: d['full_name'] as String? ?? 'Extension officer',
+          username: d['username'] as String? ?? '',
+          phone: d['phone'] as String? ?? '',
+          role: d['role'] as String? ?? 'eo',
+        );
+      }
     } catch (_) {
       // Offline with nothing cached: stay null, callers get the fallback.
       // Better a generic name than a crash mid-visit.
     }
+
+    // Start watching for unsynced work as soon as we know who's signed in,
+    // even if the profile read above failed: pending writes matter either way.
+    SyncService.instance.start(user.uid);
   }
 
-  /// Wipe on logout so the next EO on this phone never inherits a name.
-  void clear() => _profile = null;
+  /// Wipe on logout so the next EO on this phone never inherits a name,
+  /// and stop the sync listeners that were watching the previous EO's work.
+  void clear() {
+    _profile = null;
+    SyncService.instance.stop();
+  }
 }

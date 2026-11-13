@@ -4,6 +4,8 @@ import '../../services/session_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/snackbars.dart';
 import '../../widgets/role_pill.dart';
+import '../../widgets/sync_strip.dart';
+import '../register_farmer_screen.dart';
 
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
@@ -55,6 +57,8 @@ class HomeTab extends StatelessWidget {
           const SizedBox(height: 14),
 
           // --- Sync strip slots in here (2d) ---
+          const SyncStrip(),
+          const SizedBox(height: 14),
 
           // --- Unfinished visits slot in here (Phase 2) ---
           // Above the hero, as in RE: finishing what's open outranks
@@ -71,8 +75,8 @@ class HomeTab extends StatelessWidget {
           // Registering is a one-off, so it sits below the recurring job,
           // but it lives on Home because a new EO looks here first.
           _RegisterCard(
-            onTap: () => showInfoSnack(
-                context, 'Farmer registration arrives in Phase 1'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+       builder: (_) => const RegisterFarmerScreen())),
           ),
 
           // --- Last visit / Follow-ups due slot in below (Phases 2–3) ---
