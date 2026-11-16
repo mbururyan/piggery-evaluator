@@ -94,10 +94,12 @@ class FarmerDetailScreen extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             children: [
+              // No PF is shown quietly: the EO can't assign one (the office
+              // does, from the web queue), so it isn't an amber "act now".
               _Pill(
-                text: farmer.pfNumber ?? 'PF pending',
-                fg: farmer.isPendingPf ? AppColors.amberText : AppColors.green,
-                bg: farmer.isPendingPf ? AppColors.amberTint : AppColors.greenTint,
+                text: farmer.pfNumber ?? 'No PF',
+                fg: farmer.pfNumber == null ? AppColors.muted : AppColors.green,
+                bg: farmer.pfNumber == null ? AppColors.line : AppColors.greenTint,
               ),
               if (farmer.hasPendingWrites) ...[
                 const SizedBox(width: 8),
@@ -111,18 +113,36 @@ class FarmerDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
+          // --- Missing details from the old app (seed farmers) ---
+          if (farmer.needsUpdate.isNotEmpty) ...[
+            _NeedsUpdateBanner(
+              needs: farmer.needsUpdate,
+              // Only the farmer's own EO can fix it; others just see it.
+              onUpdate: farmer.assignedEoUid == AuthService.instance.currentUser?.uid
+                  ? () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => RegisterFarmerScreen(existing: farmer)))
+                  : null,
+            ),
+            const SizedBox(height: 16),
+          ],
+
           // --- Details card ---
           _Card(children: [
-            _Row(
-              'Mobile',
-              Formatters.displayPhone(farmer.mobile),
-              onTap: () => _call(context, farmer.mobile),
-            ),
+            farmer.mobile.isEmpty
+                ? const _Row('Mobile', '—')
+                : _Row(
+                    'Mobile',
+                    Formatters.displayPhone(farmer.mobile),
+                    onTap: () => _call(context, farmer.mobile),
+                  ),
             _Row('ID number', farmer.idNumber ?? '—'),
             _Row('Email', farmer.email ?? '—'),
-            _Row('Location', farmer.location.full),
+            _Row('Location',
+                farmer.location.isEmpty ? '—' : farmer.location.full),
             _Row('Assigned EO',
                 farmer.assignedEoName.isEmpty ? '—' : farmer.assignedEoName),
+            if (farmer.previousEoName != null)
+              _Row('Previous EO', farmer.previousEoName!),
             _Row('Registered', Formatters.date(farmer.registeredAt), last: true),
           ]),
           const SizedBox(height: 16),
@@ -334,6 +354,67 @@ class _StartVisitButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Amber box listing details the old app never captured. Tapping
+/// "Update details" opens the edit form; saving it clears what was fixed.
+/// In Phase 2 the same prompt also appears when a visit starts.
+class _NeedsUpdateBanner extends StatelessWidget {
+  const _NeedsUpdateBanner({required this.needs, required this.onUpdate});
+
+  final List<String> needs;
+
+  /// Null for someone else's farmer: the banner shows, but no button.
+  final VoidCallback? onUpdate;
+
+  static const _labels = {
+    'location': 'County and sub-county',
+    'phone': 'Mobile number (missing or shared with another farmer)',
+    'id': 'ID number (optional)',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.amberTint,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.amber),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Details to update',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.amberText)),
+          const SizedBox(height: 4),
+          for (final n in needs)
+            Text('· ${_labels[n] ?? n}',
+                style:
+                    const TextStyle(fontSize: 12, color: AppColors.amberText)),
+          if (onUpdate != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.amberText,
+                  side: const BorderSide(color: AppColors.amber),
+                  backgroundColor: AppColors.white,
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: onUpdate,
+                child: const Text('Update details'),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

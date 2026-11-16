@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+tools/seed_import/service-account.json
+tools/seed_import/*.csv
+tools/seed_import/__pycache__/
+tools/seed_import/node_modules/

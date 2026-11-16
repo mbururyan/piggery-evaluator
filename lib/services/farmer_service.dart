@@ -1,9 +1,8 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/farmer.dart';
 import '../utils/formatters.dart';
+import '../utils/search_tokens.dart';
 import 'auth_service.dart';
 import 'session_service.dart';
 
@@ -15,6 +14,18 @@ class DuplicateHit {
 
   /// "same phone number" / "same ID number"
   final String reason;
+}
+
+/// One page of the All farmers list.
+class FarmerPage {
+  const FarmerPage(this.farmers, this.last, this.hasMore);
+
+  final List<Farmer> farmers;
+
+  /// Where the next page starts. Firestore pages by "start after this
+  /// document", not by page number.
+  final DocumentSnapshot<Map<String, dynamic>>? last;
+  final bool hasMore;
 }
 
 /// Everything that touches farmers/. Screens get Farmer objects back and
@@ -121,6 +132,7 @@ class FarmerService {
       'status': 'pending_pf',
       'name': name.trim(),
       'name_lower': name.trim().toLowerCase(),
+      'search_tokens': SearchTokens.forName(name),
       'id_number': _blankToNull(idNumber),
       'mobile': Formatters.normalizePhone(mobile),
       'email': _blankToNull(email)?.toLowerCase(),
@@ -141,26 +153,164 @@ class FarmerService {
     return (id: ref.id, serverAck: ack);
   }
 
-  /// Updates the fields an EO may change: name, contact and location.
-  /// PF, status, assigned EO and summary are never sent from here, and
-  /// the rules reject them if they ever are.
+  // ---------------------------------------------------------------------
+  // ALL farmers (every EO's). Server-only on purpose: syncing ~2,800
+  // farmers to every phone would cost a re-download of the whole list each
+  // time the app reopens, and would put everyone's IDs and phones on every
+  // EO's phone. These read only what's on screen.
+  // ---------------------------------------------------------------------
+
+  static const pageSize = 30;
+
+  /// Server-only reads, capped so a weak signal fails fast and the screen
+  /// can say "needs signal" instead of spinning.
+  Future<QuerySnapshot<Map<String, dynamic>>> _server(
+          Query<Map<String, dynamic>> q) =>
+      q.get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 10));
+
+  /// How many farmers exist in total. A count query costs about one read
+  /// per 1,000 farmers, not one per farmer.
+  Future<int?> countAll() async {
+    try {
+      final agg = await _farmers
+          .count()
+          .get(source: AggregateSource.server)
+          .timeout(const Duration(seconds: 10));
+      return agg.count;
+    } catch (_) {
+      return null; // the header just shows no number
+    }
+  }
+
+  /// One page of all farmers, A–Z or newest first.
+  /// Both orders use single-field indexes Firestore creates by itself.
+  Future<FarmerPage> allPage({
+    required bool newestFirst,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+  }) async {
+    Query<Map<String, dynamic>> q = newestFirst
+        ? _farmers.orderBy('registered_at', descending: true)
+        : _farmers.orderBy('name_lower');
+    if (startAfter != null) q = q.startAfterDocument(startAfter);
+    final snap = await _server(q.limit(pageSize));
+    return FarmerPage(
+      snap.docs.map(Farmer.fromDoc).toList(),
+      snap.docs.isEmpty ? startAfter : snap.docs.last,
+      snap.docs.length == pageSize,
+    );
+  }
+
+  /// Searches all farmers on the server.
+  ///
+  /// - Starts with "PF": PFs beginning with what was typed (PF145 → PF14500…).
+  /// - Only digits: exact phone (any format) and exact ID number.
+  /// - Anything else: a name word beginning (see SearchTokens), then the
+  ///   other typed words are checked on the phone.
+  /// Returns up to [pageSize] matches, A–Z: enough to find someone; the
+  /// EO types more to narrow it down.
+  Future<List<Farmer>> searchAll(String typed) async {
+    final t = typed.trim();
+    final digits = t.replaceAll(RegExp(r'[\s\-+]'), '');
+
+    if (RegExp(r'^pf\d*$', caseSensitive: false).hasMatch(t.replaceAll(' ', ''))) {
+      final pf = t.replaceAll(' ', '').toUpperCase();
+      // Prefix match: everything from "PF145" up to "PF145" + the highest
+      // possible character.
+      final snap = await _server(_farmers
+          .orderBy('pf_number')
+          .startAt([pf])
+          .endAt(['$pf\uf8ff'])
+          .limit(pageSize));
+      return snap.docs.map(Farmer.fromDoc).toList();
+    }
+
+    if (RegExp(r'^\d{6,12}$').hasMatch(digits)) {
+      final phone = Formatters.normalizePhone(digits);
+      final results = await Future.wait([
+        _server(_farmers.where('mobile', isEqualTo: phone).limit(pageSize)),
+        _server(_farmers.where('id_number', isEqualTo: digits).limit(pageSize)),
+      ]);
+      // A number can be someone's phone AND someone else's ID: merge,
+      // without listing a farmer twice.
+      final byId = <String, Farmer>{};
+      for (final snap in results) {
+        for (final d in snap.docs) {
+          byId[d.id] = Farmer.fromDoc(d);
+        }
+      }
+      return byId.values.toList()
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    }
+
+    final token = SearchTokens.queryToken(t);
+    if (token == null) return const [];
+    // array-contains + orderBy needs a composite index. The first time
+    // this runs, Firestore's error message carries a link that creates it
+    // (printed to the debug console by the Farmers tab).
+    final snap = await _server(_farmers
+        .where('search_tokens', arrayContains: token)
+        .orderBy('name_lower')
+        .limit(pageSize));
+    final others = SearchTokens.words(t)..remove(token);
+    return snap.docs.map(Farmer.fromDoc).where((f) {
+      if (others.isEmpty) return true;
+      final mine = SearchTokens.forName(f.name).toSet();
+      return others.every((w) =>
+          mine.contains(w.length > SearchTokens.maxLen
+              ? w.substring(0, SearchTokens.maxLen)
+              : w));
+    }).toList();
+  }
+
+  /// Updates the fields an EO may change: name, contact and location,
+  /// and clears whatever that fixes from needs_update. PF, status,
+  /// assigned EO and summary are never sent from here, and the rules
+  /// reject them if they ever are.
   void update({
-    required String farmerId,
+    required Farmer existing,
     required String name,
     required String mobile,
     String? idNumber,
     String? email,
     required FarmerLocation location,
   }) {
-    _farmers.doc(farmerId).update({
+    _farmers.doc(existing.id).update({
       'name': name.trim(),
       'name_lower': name.trim().toLowerCase(),
+      // Rebuilt on every edit: a corrected name must stay findable.
+      'search_tokens': SearchTokens.forName(name),
       'id_number': _blankToNull(idNumber),
       'mobile': Formatters.normalizePhone(mobile),
       'email': _blankToNull(email)?.toLowerCase(),
       'location': location.toMap(),
+      'needs_update': remainingNeeds(existing.needsUpdate, location),
       'updated_at': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// What's still missing after an edit is saved.
+  ///
+  /// - location: cleared once county and sub-county are both set (the
+  ///   form requires them, so a saved edit always clears it).
+  /// - phone: cleared on save. Mobile is required, so saving means the EO
+  ///   either filled a blank number or confirmed a shared one.
+  /// - id: cleared on save EVEN IF left blank. Ryan's rule: an EO is asked
+  ///   once; skipping counts as an answer. The office can still list
+  ///   farmers without IDs from the web.
+  static List<String> remainingNeeds(
+      List<String> before, FarmerLocation location) {
+    return before.where((n) {
+      switch (n) {
+        case 'location':
+          return location.county.isEmpty || location.subcounty.isEmpty;
+        case 'phone':
+        case 'id':
+          return false;
+        default:
+          return true; // unknown future values are left for the office
+      }
+    }).toList();
   }
 
   static String? _blankToNull(String? v) =>

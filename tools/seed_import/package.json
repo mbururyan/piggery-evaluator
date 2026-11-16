@@ -1,0 +1,14 @@
+{
+  "name": "piggery-seed-import",
+  "private": true,
+  "type": "module",
+  "description": "One-off import of farmers_seed.csv into Firestore (Piggery Evaluator).",
+  "scripts": {
+    "dry-run": "node import_farmers.mjs",
+    "import": "node import_farmers.mjs --commit"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.6",
+    "firebase-admin": "^13.0.0"
+  }
+}

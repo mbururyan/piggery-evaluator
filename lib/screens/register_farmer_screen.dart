@@ -110,7 +110,7 @@ class _RegisterFarmerScreenState extends State<RegisterFarmerScreen> {
 
     if (_isEdit) {
       FarmerService.instance.update(
-        farmerId: widget.existing!.id,
+        existing: widget.existing!,
         name: _nameCtrl.text,
         mobile: _mobileCtrl.text,
         idNumber: _idCtrl.text,

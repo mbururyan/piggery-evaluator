@@ -15,6 +15,9 @@ class FarmerLocation {
   /// Free text in v1; null when the EO left it blank.
   final String? ward;
 
+  /// Seed farmers from the old app can arrive with no location at all.
+  bool get isEmpty => county.isEmpty;
+
   /// "Kiambu · Githunguri" (ward left off: list rows stay one line).
   String get short => subcounty.isEmpty ? county : '$county · $subcounty';
 
@@ -89,6 +92,9 @@ class Farmer {
     required this.createdBy,
     this.registeredAt,
     this.summary,
+    this.legacyId,
+    this.previousEoName,
+    this.needsUpdate = const [],
     this.hasPendingWrites = false,
   });
 
@@ -109,6 +115,7 @@ class Farmer {
   final String? idNumber;
 
   /// Always canonical "07…"/"01…" (see Formatters.normalizePhone).
+  /// Empty for the few seed farmers whose old-app number was invalid.
   final String mobile;
   final String? email;
   final FarmerLocation location;
@@ -126,6 +133,17 @@ class Farmer {
   final DateTime? registeredAt;
 
   final FarmerSummary? summary;
+
+  /// The old pig app's farmer id (seed farmers only). Phase 4 matches old
+  /// visits to farmers with it when there's no PF.
+  final String? legacyId;
+
+  /// Set when the import handed a former EO's farmer to their successor.
+  final String? previousEoName;
+
+  /// What the EO should be asked to fill in: any of "location", "id",
+  /// "phone". Set by the seed import; cleared as the EO updates the farmer.
+  final List<String> needsUpdate;
 
   /// True while this phone holds changes the server hasn't confirmed.
   final bool hasPendingWrites;
@@ -174,6 +192,10 @@ class Farmer {
       summary: summary is Map<String, dynamic>
           ? FarmerSummary.fromMap(summary)
           : null,
+      legacyId: d['legacy_id'] as String?,
+      previousEoName: d['previous_eo_name'] as String?,
+      needsUpdate: (d['needs_update'] as List?)?.whereType<String>().toList() ??
+          const [],
       hasPendingWrites: doc.metadata.hasPendingWrites,
     );
   }
