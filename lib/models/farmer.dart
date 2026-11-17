@@ -48,7 +48,7 @@ class FarmerSummary {
     this.lastEoName,
     this.visitCount = 0,
     this.sows,
-    this.flagsCount,
+    this.scorePct,
   });
 
   final DateTime? lastVisitDate;
@@ -59,7 +59,9 @@ class FarmerSummary {
   /// rather than a pig total, because whether gilts are also counted
   /// inside the age bands is still an open question.
   final int? sows;
-  final int? flagsCount;
+
+  /// The latest visit's score, 0–100.
+  final int? scorePct;
 
   factory FarmerSummary.fromMap(Map<String, dynamic> m) {
     final pop = m['population'] as Map<String, dynamic>?;
@@ -68,7 +70,7 @@ class FarmerSummary {
       lastEoName: m['last_eo_name'] as String?,
       visitCount: (m['visit_count'] as num?)?.toInt() ?? 0,
       sows: (pop?['sows'] as num?)?.toInt(),
-      flagsCount: (m['flags_count'] as num?)?.toInt(),
+      scorePct: (m['score_pct'] as num?)?.toInt(),
     );
   }
 }

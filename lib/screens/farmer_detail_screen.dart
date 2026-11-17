@@ -9,6 +9,7 @@ import '../utils/formatters.dart';
 import '../utils/snackbars.dart';
 import '../widgets/empty_state.dart';
 import 'register_farmer_screen.dart';
+import 'visit_setup_screen.dart';
 
 /// One farmer's page, pushed over the shell.
 ///
@@ -151,8 +152,11 @@ class FarmerDetailScreen extends StatelessWidget {
           _VisitSummary(summary: farmer.summary),
           const SizedBox(height: 20),
 
+          // Open to every EO, not only the owner: a colleague covering an
+          // area can record the visit (the farmer stays assigned).
           _StartVisitButton(
-            onTap: () => showInfoSnack(context, 'Farm visits arrive in Phase 2'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => VisitSetupScreen(farmerId: farmer.id))),
           ),
         ],
       ),
@@ -306,7 +310,7 @@ class _VisitSummary extends StatelessWidget {
         child: Row(children: [
           stat(s.sows?.toString() ?? '—', 'sows'),
           const SizedBox(width: 8),
-          stat(s.flagsCount?.toString() ?? '—', 'flags'),
+          stat(s.scorePct == null ? '—' : '${s.scorePct}%', 'score'),
           const SizedBox(width: 8),
           stat('${s.visitCount}', 'visits'),
         ]),

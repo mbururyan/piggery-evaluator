@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../models/visit.dart';
 import '../../services/session_service.dart';
+import '../../services/visit_service.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/snackbars.dart';
+import '../../utils/formatters.dart';
 import '../../widgets/role_pill.dart';
 import '../../widgets/sync_strip.dart';
+import '../farmer_picker_screen.dart';
 import '../register_farmer_screen.dart';
+import '../visit_hub_screen.dart';
 
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
@@ -56,18 +60,18 @@ class HomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
-          // --- Sync strip slots in here (2d) ---
           const SyncStrip(),
           const SizedBox(height: 14),
 
-          // --- Unfinished visits slot in here (Phase 2) ---
+          // --- Unfinished visits ---
           // Above the hero, as in RE: finishing what's open outranks
-          // starting something new.
+          // starting something new. Hidden entirely when there are none.
+          const _Drafts(),
 
           // --- Primary action ---
           _HeroCard(
-            onTap: () =>
-                showInfoSnack(context, 'Farm visits arrive in Phase 2'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const FarmerPickerScreen())),
           ),
           const SizedBox(height: 10),
 
@@ -76,10 +80,10 @@ class HomeTab extends StatelessWidget {
           // but it lives on Home because a new EO looks here first.
           _RegisterCard(
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
-       builder: (_) => const RegisterFarmerScreen())),
+                builder: (_) => const RegisterFarmerScreen())),
           ),
 
-          // --- Last visit / Follow-ups due slot in below (Phases 2–3) ---
+          // Follow-ups live in the drawer (Phase 3), to keep Home clear.
         ],
       ),
     );
@@ -208,6 +212,104 @@ class _RegisterCard extends StatelessWidget {
                   size: 18, color: AppColors.muted),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Unfinished visits": this EO's drafts, newest first, each one tap from
+/// the hub. Draws nothing at all when there are none.
+class _Drafts extends StatefulWidget {
+  const _Drafts();
+
+  @override
+  State<_Drafts> createState() => _DraftsState();
+}
+
+class _DraftsState extends State<_Drafts> {
+  // Made once: a new stream per rebuild would re-open the listener.
+  late final Stream<List<Visit>> _stream = VisitService.instance.myDrafts();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Visit>>(
+      stream: _stream,
+      builder: (context, snap) {
+        final drafts = snap.data ?? const <Visit>[];
+        if (drafts.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Unfinished visits',
+                style: TextStyle(fontSize: 12, color: AppColors.muted)),
+            const SizedBox(height: 8),
+            for (final v in drafts) ...[
+              _DraftCard(visit: v),
+              const SizedBox(height: 8),
+            ],
+            const SizedBox(height: 10),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DraftCard extends StatelessWidget {
+  const _DraftCard({required this.visit});
+  final Visit visit;
+
+  @override
+  Widget build(BuildContext context) {
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: const BorderSide(color: AppColors.amber),
+    );
+    return Material(
+      color: AppColors.white,
+      shape: shape,
+      child: InkWell(
+        customBorder: shape,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => VisitHubScreen(visitId: visit.id))),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                  shape: BoxShape.circle, color: AppColors.amberTint),
+              child: const Icon(Icons.schedule, size: 19, color: AppColors.amber),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    visit.pfNumber == null
+                        ? visit.farmerName
+                        : '${visit.farmerName} · ${visit.pfNumber}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.ink),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${visit.doneCount} of 10 sections · '
+                    'visit ${Formatters.relativeDate(visit.visitDate)}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.amberText),
+                  ),
+                ],
+              ),
+            ),
+            const Text('resume ›',
+                style: TextStyle(fontSize: 12, color: AppColors.amberText)),
+          ]),
         ),
       ),
     );
