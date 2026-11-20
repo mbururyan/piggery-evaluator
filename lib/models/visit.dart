@@ -113,8 +113,8 @@ class Visit {
 
   bool get _closeOutComplete =>
       readyForMarket != null &&
-      followUpNeeded != null &&
-      (followUpNeeded == false || followUpBy != null) &&
+      (followUpNeeded != true || followUpBy != null) &&
+      recommendations.isNotEmpty &&
       lastRecsReview.every((r) => r.outcome != null);
 
   bool get _closeOutStarted =>

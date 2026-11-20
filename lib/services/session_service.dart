@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 import 'auth_service.dart';
 import 'sync_service.dart';
@@ -86,6 +87,14 @@ class SessionService {
     // Start watching for unsynced work as soon as we know who's signed in,
     // even if the profile read above failed: pending writes matter either way.
     SyncService.instance.start(user.uid);
+
+    // Tag crash reports with who was using the phone, so "James's app
+    // crashed" can be found. uid and username only: no names or phone
+    // numbers leave the phone in a crash report.
+    final c = FirebaseCrashlytics.instance;
+    c.setUserIdentifier(user.uid);
+    c.setCustomKey('username', _profile?.username ?? '');
+    c.setCustomKey('role', _profile?.role ?? '');
   }
 
   /// Wipe on logout so the next EO on this phone never inherits a name,
@@ -93,5 +102,7 @@ class SessionService {
   void clear() {
     _profile = null;
     SyncService.instance.stop();
+    // The next person to sign in on this phone gets their own reports.
+    FirebaseCrashlytics.instance.setUserIdentifier('');
   }
 }

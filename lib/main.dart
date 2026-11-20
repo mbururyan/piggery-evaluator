@@ -1,4 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -23,10 +25,19 @@ Future<void> main() async {
     systemNavigationBarIconBrightness: Brightness.dark,
   ));
 
-  // Nothing uses Firebase yet. It's initialised now so that a broken
-  // flutterfire config fails today, on an almost empty app, rather than
-  // in the middle of the login work.
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Crash reports, so a failure on an EO's phone in the field reaches us
+  // with the line that broke, instead of "it closed" a week later.
+  // Off in debug: our own mistakes while building would bury the real ones.
+  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
+  // Errors inside Flutter (a widget throwing while building).
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  // Everything else that escapes (a failed await nobody caught).
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
 
   runApp(const PiggeryEvaluatorApp());
 }

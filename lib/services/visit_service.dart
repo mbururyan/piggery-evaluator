@@ -114,6 +114,22 @@ class VisitService {
       .map((s) => s.docs.map(Visit.fromDoc).toList()
         ..sort((a, b) => b.visitDate.compareTo(a.visitDate)));
 
+  /// Every visit this EO has made, drafts included, newest first, for the
+  /// Visits tab. One equality filter and sorted here: no index, works
+  /// offline from the cache. An EO makes a few hundred visits a year,
+  /// which the phone sorts in a blink; paging can come with the web app.
+  Stream<List<Visit>> myVisits() => _visits
+      .where('eo_uid', isEqualTo: _uid)
+      .snapshots(includeMetadataChanges: true)
+      .map((s) => s.docs.map(Visit.fromDoc).toList()
+        ..sort((a, b) {
+          final byDate = b.visitDate.compareTo(a.visitDate);
+          // Same day: the one started last goes on top.
+          return byDate != 0
+              ? byDate
+              : (b.createdAt ?? DateTime.now()).compareTo(a.createdAt ?? DateTime.now());
+        }));
+
   /// The recommendations from this farmer's most recent SUBMITTED visit
   /// (by any EO), for close-out's "what happened?" check. Null if there
   /// was none.
@@ -232,4 +248,4 @@ class VisitService {
             if (v.scoreOf(s) case final sc?) s.key: sc.toMap(),
         },
       };
-} 
+}

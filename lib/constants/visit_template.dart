@@ -33,6 +33,33 @@ enum VisitSection {
 /// answers earn a point in a section's score.
 enum Tone { good, warn, bad }
 
+/// The word for a visit's overall score, shown on the visit page and the
+/// farmer's PDF. Bands on the percentage (good answers out of scored
+/// questions), so visits with a different number of scored questions
+/// still compare fairly.
+enum Rating {
+  poor('Poor', Tone.bad),
+  fair('Fair', Tone.warn),
+  good('Good', Tone.good),
+  excellent('Excellent', Tone.good);
+
+  const Rating(this.label, this.tone);
+  final String label;
+  final Tone tone;
+
+  /// 85+ Excellent, 70–84 Good, 50–69 Fair, under 50 Poor. A starting
+  /// point (17 Nov): one place to change if the department sets its own.
+  static Rating? of(int? pct) => pct == null
+      ? null
+      : pct >= 85
+          ? excellent
+          : pct >= 70
+              ? good
+              : pct >= 50
+                  ? fair
+                  : poor;
+}
+
 /// A section's score: good answers out of the questions that are scored.
 /// Shown as "4/5"; stored as {good, of} so the web dashboard can add
 /// sections together without rounding errors.
@@ -42,6 +69,13 @@ class Score {
   final int of;
 
   bool get perfect => of > 0 && good == of;
+
+  /// Green at 80 %+, amber from 50 %, orange below: the colour of a
+  /// section's strip and score on the visit page and in the PDF.
+  Tone get tone {
+    final p = pct ?? 0;
+    return p >= 80 ? Tone.good : (p >= 50 ? Tone.warn : Tone.bad);
+  }
 
   Score operator +(Score o) => Score(good + o.good, of + o.of);
 
@@ -375,7 +409,7 @@ class PopulationTemplate {
   ];
 
   static const stock = <(String key, String label)>[
-    ('gilts', 'Gilts'), ('sows', 'Sows'), ('boars', 'Boars'),
+    ('sows', 'Sows'), ('gilts', 'Gilts'),  ('boars', 'Boars'),
   ];
 
   static Iterable<String> get allKeys =>

@@ -1,3 +1,4 @@
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 
 import '../constants/app_info.dart';
@@ -272,10 +273,29 @@ class AppDrawer extends StatelessWidget {
                   style: TextStyle(fontSize: 14, color: AppColors.alert)),
               onTap: () => _confirmLogout(context),
             ),
-            const Padding(
-              padding: EdgeInsets.only(left: 16, bottom: 10),
-              child: Text('${AppInfo.name} v${AppInfo.version}',
-                  style: TextStyle(fontSize: 11, color: AppColors.muted)),
+            // Long-press the version: sends a harmless test report, to
+            // check crash reporting works on a release build (Crashlytics
+            // is off in debug, so it says so instead). Hidden on purpose:
+            // EOs never need it.
+            GestureDetector(
+              onLongPress: () {
+                final c = FirebaseCrashlytics.instance;
+                final on = c.isCrashlyticsCollectionEnabled;
+                if (on) {
+                  c.recordError(Exception('Test report from the drawer'),
+                      StackTrace.current, reason: 'manual test', fatal: false);
+                }
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(on
+                      ? 'Test report sent'
+                      : 'Crash reporting is off in debug builds'),
+                ));
+              },
+              child: const Padding(
+                padding: EdgeInsets.only(left: 16, bottom: 10, right: 16, top: 4),
+                child: Text('${AppInfo.name} v${AppInfo.version}',
+                    style: TextStyle(fontSize: 11, color: AppColors.muted)),
+              ),
             ),
           ],
         ),

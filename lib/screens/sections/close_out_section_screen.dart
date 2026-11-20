@@ -103,11 +103,19 @@ class _CloseOutSectionScreenState extends State<CloseOutSectionScreen> {
 
   int? get _readyValue => _ready.intOf('ready_for_market');
 
-  /// What's still missing before close-out counts as done.
-  int get _left =>
-      (_readyValue == null ? 1 : 0) +
-      (_followUp == null || (_followUp == true && _by == null) ? 1 : 0) +
-      (_reviews?.where((r) => r.outcome == null).length ?? 0);
+  /// What's still missing before close-out counts as done, in words, so
+  /// the footer can say what to do rather than just "2 left".
+  ///
+  /// At least one recommendation is required (20 Nov, Ryan): every visit
+  /// should leave the farmer with something to act on. Follow-up is
+  /// optional: unanswered means no follow-up, so it's only missing when
+  /// Yes is picked without a date.
+  List<String> get _missing => [
+        if (_readyValue == null) 'pigs ready now',
+        if (!_recs.any((c) => c.text.trim().isNotEmpty)) 'a recommendation',
+        if (_followUp == true && _by == null) 'a follow-up date',
+        if (_reviews?.any((r) => r.outcome == null) ?? false) "last visit's review",
+      ];
 
   void _save() {
     if (_locked || _saved) return;
@@ -156,7 +164,7 @@ class _CloseOutSectionScreenState extends State<CloseOutSectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final left = _left;
+    final missing = _missing;
     return PopScope(
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) _save();
@@ -164,7 +172,7 @@ class _CloseOutSectionScreenState extends State<CloseOutSectionScreen> {
       child: SectionPage(
         section: VisitSection.closeOut,
         locked: _locked,
-        footerNote: left == 0 ? 'all done' : '$left left',
+        footerNote: missing.isEmpty ? 'all done' : 'Still needs ${missing.join(', ')}',
         onSaveAndNext: _locked
             ? null
             : () {
@@ -202,7 +210,9 @@ class _CloseOutSectionScreenState extends State<CloseOutSectionScreen> {
               for (var i = 0; i < _reviews!.length; i++) _reviewRow(i),
             ]),
           SectionCard(children: [
-            const SectionTitle('Recommendations for this visit', subtitle: 'Up to 5'),
+            // No "Up to 5" caption (20 Nov, Ryan): the Add button simply
+            // disappears at five, which says it on its own.
+            const SectionTitle('Recommendations for this visit'),
             for (var i = 0; i < _recs.length; i++) _recRow(i),
             if (_recs.length < _maxRecs && !_locked)
               Align(
@@ -304,8 +314,8 @@ class _CloseOutSectionScreenState extends State<CloseOutSectionScreen> {
               maxLines: 3,
               textCapitalization: TextCapitalization.sentences,
               onChanged: (_) => _touch(() {}),
-              decoration: const InputDecoration(
-                  hintText: 'e.g. Build a foot bath at the entrance'),
+              // No example text in the box (20 Nov, Ryan): it read like an
+              // answer already filled in.
             ),
           ),
           if (!_locked)
