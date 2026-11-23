@@ -86,9 +86,8 @@ class _BreedingSectionScreenState extends State<BreedingSectionScreen> {
       child: SectionPage(
         section: _section,
         locked: _locked,
-        footerNote: complete
-            ? 'Score ${BreedingTemplate.score(_payload)}'
-            : 'not finished',
+        // Every question is optional (23 Nov): no "not finished" nagging.
+        footerNote: complete ? 'Score ${BreedingTemplate.score(_payload)}' : null,
         onSaveAndNext: _locked
             ? null
             : () {

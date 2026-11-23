@@ -97,7 +97,9 @@ class Visit {
     return v is Map<String, dynamic> ? v : null;
   }
 
-  // ---- close-out lives in top-level fields (as in the data model) ----
+  // ---- the Recommendations section lives in top-level fields ----
+  // readyForMarket and the follow-up were dropped from the form on 23 Nov
+  // (Ryan). Kept as getters only so visits made before then still read.
   int? get readyForMarket => (data['ready_for_market'] as num?)?.toInt();
   List<String> get recommendations =>
       (data['recommendations'] as List?)?.whereType<String>().toList() ?? const [];
@@ -111,16 +113,12 @@ class Visit {
   DateTime? get followUpBy =>
       ((data['follow_up'] as Map<String, dynamic>?)?['by'] as Timestamp?)?.toDate();
 
-  bool get _closeOutComplete =>
-      readyForMarket != null &&
-      (followUpNeeded != true || followUpBy != null) &&
-      recommendations.isNotEmpty &&
-      lastRecsReview.every((r) => r.outcome != null);
+  /// Done = at least one recommendation (required, 20 Nov). Reviewing
+  /// last visit's recommendations is optional like everything else.
+  bool get _closeOutComplete => recommendations.isNotEmpty;
 
   bool get _closeOutStarted =>
-      data.containsKey('ready_for_market') ||
-      data.containsKey('follow_up') ||
-      recommendations.isNotEmpty;
+      recommendations.isNotEmpty || lastRecsReview.any((r) => r.outcome != null);
 
   /// Not started / in progress / done, straight from the templates, so
   /// the hub and the submit check can never disagree.
@@ -135,29 +133,28 @@ class Visit {
       VisitSection.production => ProductionTemplate.isComplete(d),
       VisitSection.breeding => BreedingTemplate.isComplete(d),
       VisitSection.population => PopulationTemplate.isComplete(d),
-      VisitSection.intake => IntakeTemplate.isComplete(d),
       _ => VisitTemplates.checklistFor(s)!.isComplete(d),
     };
     return complete ? SectionState.done : SectionState.inProgress;
   }
 
   /// A section's score, or null for the sections that aren't scored
-  /// (population, intake, close-out are counts and plans, not quality).
+  /// (population and recommendations are counts and plans, not quality).
   Score? scoreOf(VisitSection s) {
     final d = section(s);
     return switch (s) {
       VisitSection.production => ProductionTemplate.score(d, targets),
       VisitSection.breeding => BreedingTemplate.score(d),
-      VisitSection.population || VisitSection.intake || VisitSection.closeOut => null,
+      VisitSection.population || VisitSection.closeOut => null,
       _ => VisitTemplates.checklistFor(s)!.score(d),
     };
   }
 
-  /// The whole visit's score, from FINISHED sections only: half-answered
-  /// sections would drag a draft's score down for questions not yet asked.
-  /// A submitted visit has every section finished, so it's the full score.
+  /// The whole visit's score: good answers out of every question that was
+  /// ANSWERED, in any section, finished or not (23 Nov: questions can be
+  /// skipped, and a skipped one isn't a fail). Always shown with its
+  /// count ("11 of 14"), so a 3-answer visit can't pass for a full one.
   Score get score => VisitSection.values
-      .where((s) => stateOf(s) == SectionState.done)
       .map(scoreOf)
       .whereType<Score>()
       .fold(const Score(0, 0), (a, b) => a + b);
@@ -165,7 +162,24 @@ class Visit {
   int get doneCount =>
       VisitSection.values.where((s) => stateOf(s) == SectionState.done).length;
 
-  bool get canSubmit => doneCount == VisitSection.values.length;
+  /// Sections with anything in them: the hub's "5 of 9 sections".
+  int get startedCount =>
+      VisitSection.values.where((s) => stateOf(s) != SectionState.notStarted).length;
+
+  /// Sections left out entirely: not on the report, named on review.
+  List<VisitSection> get skipped =>
+      VisitSection.values.where((s) => stateOf(s) == SectionState.notStarted).toList();
+
+  /// What still blocks Submit, in words for the hub ("Population",
+  /// "a recommendation"). Empty = ready.
+  List<String> get missingRequired => [
+        for (final s in VisitSection.values)
+          if (s.required && stateOf(s) != SectionState.done)
+            s == VisitSection.closeOut ? 'a recommendation' : s.label,
+      ];
+
+  /// Only the required sections gate Submit (23 Nov).
+  bool get canSubmit => missingRequired.isEmpty;
 
   /// Sum of the age bands (growing pigs), for the hub subtitle.
   int? get growingPigs {
@@ -177,9 +191,6 @@ class Visit {
 
   /// Sows on this visit, for the review screen.
   int? get sows => (section(VisitSection.population)?['sows'] as num?)?.toInt();
-
-  /// Pigs planned for FCL over the 12 months.
-  int get intakeTotal => IntakeTemplate.total(section(VisitSection.intake));
 
   /// A copy with one section's answers replaced: lets a save rescore
   /// the answers being saved, not the ones before.

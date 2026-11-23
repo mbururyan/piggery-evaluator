@@ -7,6 +7,8 @@ import '../models/farmer.dart';
 import '../models/visit.dart';
 import '../services/farmer_service.dart';
 import '../services/pdf_report.dart';
+import '../services/report_mail.dart';
+import '../services/auth_service.dart';
 import '../services/visit_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
@@ -39,6 +41,8 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
   Stream<Farmer?>? _farmerStream;
   String? _farmerId;
   String? _phone;
+  Farmer? _farmer;
+  bool _emailing = false;
 
   Stream<Farmer?> _farmerFor(String id) {
     if (_farmerId != id) {
@@ -71,6 +75,51 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
     }
   }
 
+  /// "Email again to mary@…", under Export. Only on a submitted visit,
+  /// only for the EO who made it (the rules allow nobody else), and only
+  /// when the farmer has an address: otherwise there's nothing to show.
+  Widget _emailAgainRow(Visit v, String? address) {
+    final mine = v.eoUid == AuthService.instance.currentUser?.uid;
+    if (v.isDraft || !mine || address == null) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: _emailing ? null : () => _emailAgain(v, address),
+        icon: _emailing
+            ? const SizedBox(
+                width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.mail_outline, size: 18),
+        label: Text('Email again to $address', maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+    );
+  }
+
+  /// Asks first: the report already went out on Submit, so a second copy
+  /// should be a choice, never a slip of the thumb.
+  Future<void> _emailAgain(Visit v, String address) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        backgroundColor: AppColors.white,
+        title: const Text('Email the report again?', style: TextStyle(fontSize: 17)),
+        content: Text('A new copy goes to $address.',
+            style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(d).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(d).pop(true), child: const Text('Send')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _emailing = true);
+    final text = ReportMail.message(await ReportMail.queue(v, _farmer));
+    if (!mounted) return;
+    setState(() => _emailing = false);
+    if (text != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Visit?>(
@@ -98,19 +147,21 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
           ),
           body: v == null
               ? const Center(child: CircularProgressIndicator(strokeWidth: 2.4))
-              : SafeArea(
+              // ONE listener on the farmer for the whole page (phone in the
+              // facts, the address for Email again): a Firestore stream
+              // listened to twice can throw.
+              : StreamBuilder<Farmer?>(
+                  stream: _farmerFor(v.farmerId),
+                  builder: (context, fs) {
+                    // Kept for the PDF and the email, which are built
+                    // outside this builder when tapped.
+                    _phone = fs.data?.mobile;
+                    _farmer = fs.data;
+                    return SafeArea(
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
                     children: [
-                      StreamBuilder<Farmer?>(
-                        stream: _farmerFor(v.farmerId),
-                        builder: (context, fs) {
-                          // Kept for the PDF, which is built outside this
-                          // builder when Export is tapped.
-                          _phone = fs.data?.mobile;
-                          return _Facts(v, _phone);
-                        },
-                      ),
+                      _Facts(v, _phone),
                       const SizedBox(height: 12),
                       _ScoreRow(v),
                       const SizedBox(height: 12),
@@ -119,22 +170,36 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
                         // A draft isn't a finished report yet.
                         onTap: v.isDraft ? null : () => _export(v),
                       ),
+                      _emailAgainRow(v, ReportMail.addressOf(fs.data)),
                       const SizedBox(height: 18),
                       const _Label('Sections'),
                       const SizedBox(height: 8),
                       // Population first (20 Nov, Ryan): the pig count is
                       // the first thing anyone asks about a farm. Close-out
                       // isn't a tile; it's the Recommendations card below.
-                      _SectionTile(v, VisitSection.population),
+                      // Only sections with something in them (23 Nov):
+                      // skipped ones are named in one line instead, as on
+                      // the farmer's report, which leaves them out.
                       for (final s in VisitSection.values)
-                        if (s != VisitSection.closeOut && s != VisitSection.population)
+                        if (s != VisitSection.closeOut &&
+                            v.stateOf(s) != SectionState.notStarted)
                           _SectionTile(v, s),
+                      if (v.skipped.where((s) => s != VisitSection.closeOut).isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
+                          child: Text(
+                            'Skipped: ${v.skipped.where((s) => s != VisitSection.closeOut).map((s) => s.label).join(', ')}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                          ),
+                        ),
                       const SizedBox(height: 10),
                       _Recommendations(v),
                       const SizedBox(height: 16),
                       _StatusLine(v),
                     ],
                   ),
+                );
+                  },
                 ),
         );
       },
@@ -326,16 +391,15 @@ class _SectionTile extends StatelessWidget {
       strip = AppColors.line;
       right = '—';
       rightColor = AppColors.muted;
-    } else if (sc != null) {
+    } else if (sc != null && sc.of > 0) {
       final (fg, _) = toneColors(sc.tone);
       strip = fg;
       right = '$sc';
       rightColor = fg;
     } else {
+      // Population, or a section with only a remark or an unscored answer.
       strip = AppColors.inputBorder;
-      right = s == VisitSection.population
-          ? '${v.growingPigs ?? 0} pigs'
-          : '${v.intakeTotal} planned';
+      right = s == VisitSection.population ? '${v.growingPigs ?? 0} pigs' : '';
     }
 
     final remark = (d?['remark'] as String?)?.trim();
@@ -376,7 +440,6 @@ class _SectionTile extends StatelessWidget {
                     VisitSection.production => _production(d),
                     VisitSection.breeding => _breeding(d),
                     VisitSection.population => _population(d),
-                    VisitSection.intake => _intake(d),
                     _ => _checklist(VisitTemplates.checklistFor(s)!, d),
                   },
                 if (remark != null && remark.isNotEmpty)
@@ -397,12 +460,16 @@ class _SectionTile extends StatelessWidget {
     );
   }
 
+  // Answered questions only (23 Nov), the same as the farmer's report:
+  // a list of dashes for skipped questions is clutter, not information.
   List<Widget> _checklist(ChecklistTemplate t, Map<String, dynamic> d) => [
-        for (final r in t.rows) _Answer(r.label, t.optionFor(r, d[r.id])),
+        for (final r in t.rows)
+          if (t.optionFor(r, d[r.id]) case final o?) _Answer(r.label, o),
       ];
 
   List<Widget> _production(Map<String, dynamic> d) => [
         for (final k in ProductionTemplate.kpis)
+          if (d[k.id] is num)
           _Value(
             k.short,
             d[k.id] is num ? '${TileFields.fmt(d[k.id] as num)} ${k.unit}' : '—',
@@ -423,24 +490,24 @@ class _SectionTile extends StatelessWidget {
     final breed = d['breed'] as String?;
     final other = (d['breed_other'] as String?)?.trim();
     return [
-      _Value('Breed',
-          breed == null ? '—' : (breed == 'Other' && (other ?? '').isNotEmpty ? other! : breed)),
+      if (breed != null)
+        _Value('Breed', breed == 'Other' && (other ?? '').isNotEmpty ? other! : breed),
       for (final r in BreedingTemplate.yesNoRows)
-        _Answer(
-          r.$2,
-          d[r.$1] is bool
-              ? (d[r.$1] == true
-                  ? const AnswerOption(true, 'Yes', Tone.good)
-                  : AnswerOption(false, 'No', r.$3 ? Tone.bad : Tone.warn))
-              : null,
-        ),
-      _Value('Highest parity', '${d['highest_parity'] ?? '—'}'),
+        if (d[r.$1] is bool)
+          _Answer(
+            r.$2,
+            d[r.$1] == true
+                ? const AnswerOption(true, 'Yes', Tone.good)
+                : AnswerOption(false, 'No', r.$3 ? Tone.bad : Tone.warn),
+          ),
+      if (d['highest_parity'] != null) _Value('Highest parity', '${d['highest_parity']}'),
     ];
   }
 
   /// Everything counted on the day. The growing-pig total is already in
-  /// the tile's header, so the body is the breeding stock and ready-for-
-  /// market as four equal counts, then the eight age bands.
+  /// the tile's header, so the body is the breeding stock as three equal
+  /// counts, then the eight age bands. (Ready for market left the form on
+  /// 23 Nov.)
   List<Widget> _population(Map<String, dynamic> d) {
     int n(String k) => (d[k] as num?)?.toInt() ?? 0;
 
@@ -461,7 +528,6 @@ class _SectionTile extends StatelessWidget {
         count('Sows', n('sows')),
         count('Gilts', n('gilts')),
         count('Boars', n('boars')),
-        count('Ready for market', v.readyForMarket ?? 0),
       ]),
       const SizedBox(height: 14),
       const _Kicker('GROWING PIGS BY AGE (MONTHS)'),
@@ -470,22 +536,6 @@ class _SectionTile extends StatelessWidget {
     ];
   }
 
-  List<Widget> _intake(Map<String, dynamic> d) {
-    final months = IntakeTemplate.monthsOf(d) ?? const <String, dynamic>{};
-    final planned = [
-      for (final m in IntakeTemplate.monthsFrom(v.visitDate))
-        if ((months[IntakeTemplate.keyOf(m)] as num? ?? 0) > 0)
-          (_month(m), '${(months[IntakeTemplate.keyOf(m)] as num).toInt()}'),
-    ];
-    return [
-      if (planned.isEmpty) const _Muted('None planned') else _MiniGrid(planned),
-    ];
-  }
-
-  static const _mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  static String _month(DateTime m) =>
-      '${_mon[m.month - 1]} ${(m.year % 100).toString().padLeft(2, '0')}';
 }
 
 /// Close-out, always open below the sections: it's what the farmer
@@ -503,11 +553,13 @@ class _Recommendations extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (v.lastRecsReview.isNotEmpty) ...[
+      // Only the ones the EO answered: reviewing them is optional now.
+      if (v.lastRecsReview.any((r) => r.outcome != null)) ...[
         const _Label("Last visit's recommendations"),
         const SizedBox(height: 6),
         _Box(children: [
-          for (final r in v.lastRecsReview) _Answer(r.text, _outcomes[r.outcome]),
+          for (final r in v.lastRecsReview)
+            if (r.outcome != null) _Answer(r.text, _outcomes[r.outcome]),
         ]),
         const SizedBox(height: 14),
       ],
@@ -529,16 +581,6 @@ class _Recommendations extends StatelessWidget {
                 child: Text('${i + 1}. ${v.recommendations[i]}',
                     style: const TextStyle(fontSize: 13.5)),
               ),
-            const SizedBox(height: 4),
-            Text(
-              [
-                'Ready for market: ${v.readyForMarket ?? 0} pigs',
-                v.followUpNeeded == true
-                    ? 'Follow-up by ${Formatters.date(v.followUpBy)}'
-                    : 'No follow-up',
-              ].join(' · '),
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
-            ),
           ]),
         ),
       ),

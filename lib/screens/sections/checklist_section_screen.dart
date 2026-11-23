@@ -74,7 +74,6 @@ class _ChecklistSectionScreenState extends State<ChecklistSectionScreen> {
   Widget build(BuildContext context) {
     final t = widget.template;
     final answered = t.answered(_answers);
-    final left = t.rows.length - answered;
 
     // Saving on the way out, by Back button or gesture, means the EO can
     // leave mid-section and lose nothing.
@@ -85,9 +84,13 @@ class _ChecklistSectionScreenState extends State<ChecklistSectionScreen> {
       child: SectionPage(
         section: _section,
         locked: _locked,
-        // The score only appears once everything is answered: a running
-        // score mid-section reads like a mark for questions not asked yet.
-        footerNote: left == 0 ? 'Score ${t.score(_answers)}' : '$left left',
+        // "3 answered", never "3 left": every question can be skipped
+        // (23 Nov). The score joins once everything's answered.
+        footerNote: answered == 0
+            ? 'Answer what applies, skip the rest'
+            : answered == t.rows.length
+                ? 'Score ${t.score(_answers)}'
+                : '$answered answered',
         onSaveAndNext: _locked
             ? null
             : () {

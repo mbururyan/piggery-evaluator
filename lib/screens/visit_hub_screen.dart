@@ -110,7 +110,9 @@ class VisitHubScreen extends StatelessWidget {
       );
     }
 
-    final done = visit.doneCount;
+    // Started, not finished: with optional sections (23 Nov), a section
+    // with some answers is real progress, and "done" would undercount.
+    final started = visit.startedCount;
     final pct = visit.score.pct;
 
     return Column(
@@ -129,7 +131,7 @@ class VisitHubScreen extends StatelessWidget {
                 ),
                 child: Column(children: [
                   Row(children: [
-                    Text('$done of ${VisitSection.values.length} sections done',
+                    Text('$started of ${VisitSection.values.length} sections',
                         style: const TextStyle(
                             fontSize: 13.5, fontWeight: FontWeight.w600)),
                     const Spacer(),
@@ -146,7 +148,7 @@ class VisitHubScreen extends StatelessWidget {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(999),
                     child: LinearProgressIndicator(
-                      value: done / VisitSection.values.length,
+                      value: started / VisitSection.values.length,
                       minHeight: 6,
                       backgroundColor: AppColors.line,
                       color: AppColors.green,
@@ -156,7 +158,7 @@ class VisitHubScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              // --- The ten sections ---
+              // --- The nine sections ---
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.white,
@@ -168,9 +170,11 @@ class VisitHubScreen extends StatelessWidget {
                     _SectionRow(
                       section: s,
                       state: visit.stateOf(s),
-                      score: visit.stateOf(s) == SectionState.done
-                          ? visit.scoreOf(s)
-                          : null,
+                      // Any answered question scores now, finished or not.
+                      score: switch (visit.scoreOf(s)) {
+                        final sc? when sc.of > 0 => sc,
+                        _ => null,
+                      },
                       subtitle: _subtitle(visit, s),
                       last: s == VisitSection.values.last,
                       onTap: () => _openSection(context, visit, s),
@@ -194,10 +198,10 @@ class VisitHubScreen extends StatelessWidget {
                     child: const Text('Review & submit'),
                   ),
                   if (!visit.canSubmit)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Text('Unlocks when every section is done',
-                          style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text('Needs ${visit.missingRequired.join(' and ')}',
+                          style: const TextStyle(fontSize: 11, color: AppColors.muted)),
                     ),
                 ])
               // A submitted visit opened later: no button, just where it
@@ -217,24 +221,27 @@ class VisitHubScreen extends StatelessWidget {
     );
   }
 
-  /// The grey line under each section name.
+  /// The grey line under each section name. Plain facts ("3 of 6
+  /// answered", "149 growing pigs"); nothing is labelled optional
+  /// (23 Nov, Ryan). Only the two required sections add "Required".
   String _subtitle(Visit v, VisitSection s) {
     final state = v.stateOf(s);
-    if (state == SectionState.notStarted) return s.hint;
-    if (state == SectionState.inProgress) {
-      final t = VisitTemplates.checklistFor(s);
-      return t == null
-          ? 'In progress'
-          : 'In progress · ${t.answered(v.section(s))} of ${t.rows.length} answered';
+    final d = v.section(s);
+    if (s == VisitSection.population) {
+      return state == SectionState.done ? '${v.growingPigs ?? 0} growing pigs' : 'Not started';
     }
-    return switch (s) {
-      VisitSection.population => 'Done · ${v.growingPigs ?? 0} growing pigs',
-      VisitSection.intake => 'Done · ${v.intakeTotal} pigs planned',
-      VisitSection.closeOut => v.followUpNeeded == true
-          ? 'Done · follow-up by ${Formatters.date(v.followUpBy)}'
-          : 'Done',
-      _ => 'Done',
-    };
+    if (s == VisitSection.closeOut) {
+      final n = v.recommendations.length;
+      return n == 0 ? 'Add at least one' : '$n ${n == 1 ? 'recommendation' : 'recommendations'}';
+    }
+    if (state == SectionState.notStarted) return 'Not started';
+    if (s == VisitSection.production) {
+      return '${ProductionTemplate.entered(d)} of ${ProductionTemplate.kpis.length} entered';
+    }
+    final t = VisitTemplates.checklistFor(s);
+    if (t == null) return state == SectionState.done ? 'Done' : 'In progress';
+    final a = t.answered(d);
+    return a == t.rows.length ? '$a of $a' : '$a of ${t.rows.length} answered';
   }
 }
 
@@ -307,12 +314,19 @@ class _SectionRow extends StatelessWidget {
                         fontWeight: FontWeight.w500,
                         color: AppColors.ink)),
                 const SizedBox(height: 1),
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: state == SectionState.notStarted
-                            ? AppColors.muted
-                            : fg)),
+                // "Required" is part of the grey line, in small orange
+                // text (23 Nov, Ryan): noticeable, not shouting.
+                Text.rich(
+                  TextSpan(children: [
+                    TextSpan(text: subtitle),
+                    if (section.required)
+                      const TextSpan(
+                          text: ' · Required', style: TextStyle(color: AppColors.alert)),
+                  ]),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: state == SectionState.notStarted ? AppColors.muted : fg),
+                ),
               ],
             ),
           ),

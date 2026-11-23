@@ -7,7 +7,6 @@ import '../review_submit_screen.dart';
 import 'breeding_section_screen.dart';
 import 'checklist_section_screen.dart';
 import 'close_out_section_screen.dart';
-import 'intake_section_screen.dart';
 import 'population_section_screen.dart';
 import 'production_section_screen.dart';
 
@@ -22,7 +21,6 @@ void openSection(BuildContext context, Visit visit, VisitSection s,
     VisitSection.production => ProductionSectionScreen(visit: visit),
     VisitSection.breeding => BreedingSectionScreen(visit: visit),
     VisitSection.population => PopulationSectionScreen(visit: visit),
-    VisitSection.intake => IntakeSectionScreen(visit: visit),
     VisitSection.closeOut => CloseOutSectionScreen(visit: visit),
     _ => ChecklistSectionScreen(
         visit: visit, template: VisitTemplates.checklistFor(s)!),
@@ -35,8 +33,9 @@ void openSection(BuildContext context, Visit visit, VisitSection s,
 }
 
 /// After saving a section: go to the next one. After the last: straight
-/// to Review & submit if everything's done, otherwise back to the hub
-/// with how many are left.
+/// to Review & submit once the required parts are in (Population and a
+/// recommendation; everything else is optional), otherwise back to the
+/// hub saying what's still needed.
 void openNextSection(BuildContext context, Visit visit, VisitSection current) {
   final i = VisitSection.values.indexOf(current);
   if (i == VisitSection.values.length - 1) {
@@ -46,9 +45,9 @@ void openNextSection(BuildContext context, Visit visit, VisitSection current) {
       return;
     }
     Navigator.of(context).pop();
-    final left = VisitSection.values.length - visit.doneCount;
-    if (visit.isDraft && left > 0) {
-      showInfoSnack(context, '$left ${left == 1 ? 'section' : 'sections'} still to finish');
+    final missing = visit.missingRequired;
+    if (visit.isDraft && missing.isNotEmpty) {
+      showInfoSnack(context, 'Still needs ${missing.join(' and ')}');
     }
     return;
   }

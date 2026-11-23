@@ -181,17 +181,15 @@ class VisitService {
     });
   }
 
-  /// Saves close-out, which lives in four top-level fields.
-  void saveCloseOut(
+  /// Saves the Recommendations section (top-level fields). Ready for
+  /// market and the follow-up left the form on 23 Nov; old visits keep
+  /// theirs, new ones simply never write them.
+  void saveRecommendations(
     Visit visit, {
-    required int? readyForMarket,
     required List<String> recommendations,
     required List<RecReview>? lastRecsReview,
-    required bool? followUpNeeded,
-    required DateTime? followUpBy,
   }) {
     _visits.doc(visit.id).update({
-      'ready_for_market': readyForMarket,
       // Max 5, as on the paper form; blanks dropped.
       'recommendations': recommendations
           .map((r) => r.trim())
@@ -202,12 +200,6 @@ class VisitService {
       // out so it's looked up next time close-out opens.
       if (lastRecsReview != null)
         'last_recs_review': lastRecsReview.map((r) => r.toMap()).toList(),
-      'follow_up': {
-        'needed': followUpNeeded,
-        'by': followUpNeeded == true && followUpBy != null
-            ? Timestamp.fromDate(followUpBy)
-            : null,
-      },
       ..._editStamp(visit),
     });
   }

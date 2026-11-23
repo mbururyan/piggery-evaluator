@@ -99,7 +99,9 @@ class RemarkField extends StatelessWidget {
         maxLines: 5,
         textCapitalization: TextCapitalization.sentences,
         decoration: const InputDecoration(
-          hintText: 'Optional: one note for the whole section',
+          // Remarks print on the farmer's PDF (20 Nov), so the EO is told
+          // as they write, not after.
+          hintText: "Optional: printed on the farmer's report",
         ),
       ),
     ]);

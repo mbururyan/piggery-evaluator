@@ -300,7 +300,7 @@ class _DraftCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${visit.doneCount} of 10 sections · '
+                    '${visit.startedCount} of 9 sections · '
                     'visit ${Formatters.relativeDate(visit.visitDate)}',
                     style: const TextStyle(fontSize: 12, color: AppColors.amberText),
                   ),

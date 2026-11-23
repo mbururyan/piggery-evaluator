@@ -9,7 +9,18 @@ library;
 /// The ten parts of a visit, in the order of the paper form (sections
 /// 3–11, then close-out). [key] is the Firestore field the section's
 /// answers live in.
+/// The visit's sections, in the order the EO fills them.
+///
+/// 23 Nov (Ryan, after the first EO trial: "way too many questions"):
+/// Population first, Production second; the intake schedule removed;
+/// close-out renamed "Recommendations". Only Population and a
+/// recommendation are required ([required]); every other section and
+/// question can be skipped, and what's skipped stays off the report.
+///
+/// The [key]s never change: they're the field names in stored visits.
+/// Old visits still hold an `intake_schedule` map; nothing shows it now.
 enum VisitSection {
+  population('population', 'Population', 'Pigs by age, sows, boars', required: true),
   production('production', 'Production', 'Actuals against targets'),
   biosecurity('biosecurity', 'Biosecurity', 'Wheel dip, foot bath, PPE…'),
   herdHealth('herd_health', 'Herd health', 'Piglets, weaners, growers…'),
@@ -17,14 +28,15 @@ enum VisitSection {
   feeds('feeds', 'Feeds', 'Feed types, swill, water'),
   breeding('breeding', 'Breeding', 'Breed, replacement, AI'),
   housing('housing', 'Housing', 'Structures, spacing, hygiene…'),
-  population('population', 'Population', 'Pigs by age, sows, boars'),
-  intake('intake_schedule', 'Intake schedule', 'Pigs to deliver, 12 months'),
-  closeOut('close_out', 'Close-out', 'Recommendations, follow-up');
+  closeOut('close_out', 'Recommendations', 'What the farmer should do next', required: true);
 
-  const VisitSection(this.key, this.label, this.hint);
+  const VisitSection(this.key, this.label, this.hint, {this.required = false});
   final String key;
   final String label;
   final String hint;
+
+  /// Must be done before the visit can be submitted.
+  final bool required;
 }
 
 // ───────────────────────────── answer tones ──────────────────────────────
@@ -145,14 +157,14 @@ class ChecklistTemplate {
   bool isComplete(Map<String, dynamic>? data) =>
       data != null && rows.every((r) => optionFor(r, data[r.id]) != null);
 
-  /// Every question counts; only a good (green) answer earns the point.
-  /// Amber (Fair) earns nothing: it's shown, but it isn't good.
-  Score score(Map<String, dynamic>? data) => Score(
-        data == null
-            ? 0
-            : rows.where((r) => optionFor(r, data[r.id])?.tone == Tone.good).length,
-        rows.length,
-      );
+  /// Good (green) answers out of the questions ANSWERED (23 Nov: every
+  /// question can be skipped, and a skipped one isn't a fail). Amber
+  /// (Fair) earns nothing: it's shown, but it isn't good.
+  Score score(Map<String, dynamic>? data) {
+    if (data == null) return const Score(0, 0);
+    final given = rows.map((r) => optionFor(r, data[r.id])).whereType<AnswerOption>();
+    return Score(given.where((o) => o.tone == Tone.good).length, given.length);
+  }
 
   int answered(Map<String, dynamic>? data) => data == null
       ? 0
@@ -335,15 +347,19 @@ class ProductionTemplate {
   static bool isComplete(Map<String, dynamic>? data) =>
       data != null && kpis.every((k) => data[k.id] is num);
 
-  /// One point per KPI on target. Only KPIs with a target in this visit's
-  /// snapshot count, so monthly sales (no target) is never scored.
+  /// One point per KPI on target, out of the KPIs ENTERED that have a
+  /// target in this visit's snapshot (monthly sales has none, so it's
+  /// never scored; a blank figure isn't a fail).
   static Score score(Map<String, dynamic>? data, Map<String, num> targets) {
-    final scored = kpis.where((k) => k.hasTarget && targets[k.id] != null);
-    final good = data == null
-        ? 0
-        : scored.where((k) => k.meets(data[k.id] as num?, targets[k.id]) == true).length;
+    if (data == null) return const Score(0, 0);
+    final scored = kpis.where((k) => k.hasTarget && targets[k.id] != null && data[k.id] is num);
+    final good = scored.where((k) => k.meets(data[k.id] as num?, targets[k.id]) == true).length;
     return Score(good, scored.length);
   }
+
+  /// How many figures were entered.
+  static int entered(Map<String, dynamic>? data) =>
+      data == null ? 0 : kpis.where((k) => data[k.id] is num).length;
 }
 
 /// The paper form's targets. Used only if settings/targets can't be read
@@ -387,12 +403,11 @@ class BreedingTemplate {
     return yesNoRows.every((r) => d[r.$1] is bool);
   }
 
+  /// Out of the scored rows ANSWERED (see ChecklistTemplate.score).
   static Score score(Map<String, dynamic>? d) {
-    final scored = yesNoRows.where((r) => r.$3);
-    return Score(
-      d == null ? 0 : scored.where((r) => d[r.$1] == true).length,
-      scored.length,
-    );
+    if (d == null) return const Score(0, 0);
+    final answered = yesNoRows.where((r) => r.$3 && d[r.$1] is bool);
+    return Score(answered.where((r) => d[r.$1] == true).length, answered.length);
   }
 }
 
@@ -409,7 +424,7 @@ class PopulationTemplate {
   ];
 
   static const stock = <(String key, String label)>[
-    ('sows', 'Sows'), ('gilts', 'Gilts'),  ('boars', 'Boars'),
+    ('sows', 'Sows'), ('gilts', 'Gilts'), ('boars', 'Boars'),
   ];
 
   static Iterable<String> get allKeys =>
@@ -417,31 +432,4 @@ class PopulationTemplate {
 
   static bool isComplete(Map<String, dynamic>? d) =>
       d != null && allKeys.every((k) => d[k] is num);
-}
-
-// ───────────────────────────── intake ────────────────────────────────────
-
-class IntakeTemplate {
-  IntakeTemplate._();
-
-  /// The 12 months a visit's plan covers, starting with the visit month,
-  /// as "YYYY-MM" keys: a 17 Nov 2026 visit -> 2026-11 … 2027-10.
-  static List<DateTime> monthsFrom(DateTime visitDate) =>
-      List.generate(12, (i) => DateTime(visitDate.year, visitDate.month + i));
-
-  static String keyOf(DateTime m) =>
-      '${m.year}-${m.month.toString().padLeft(2, '0')}';
-
-  /// Stored as intake_schedule: {months: {"2026-11": 15, …}, remark}.
-  /// The months sit in their own map so nothing reading the plan (the
-  /// web, projections) ever has to skip over "remark".
-  static Map<String, dynamic>? monthsOf(Map<String, dynamic>? d) =>
-      d?['months'] is Map<String, dynamic> ? d!['months'] as Map<String, dynamic> : null;
-
-  /// Blank months mean "none planned", so the section is done once saved;
-  /// the screen stores all 12 months (blanks as 0).
-  static bool isComplete(Map<String, dynamic>? d) => (monthsOf(d)?.length ?? 0) >= 12;
-
-  static int total(Map<String, dynamic>? d) =>
-      monthsOf(d)?.values.whereType<num>().fold<int>(0, (n, v) => n + v.toInt()) ?? 0;
 }

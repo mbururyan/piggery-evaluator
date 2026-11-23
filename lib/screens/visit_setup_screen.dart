@@ -63,7 +63,7 @@ class _VisitSetupScreenState extends State<VisitSetupScreen> {
           content: Text(
             'You already started a visit to ${farmer.name} on '
             '${Formatters.date(existing.visitDate)} '
-            '(${existing.doneCount} of 10 sections done).',
+            '(${existing.startedCount} of 9 sections started).',
             style: const TextStyle(fontSize: 13, color: AppColors.muted),
           ),
           actions: [

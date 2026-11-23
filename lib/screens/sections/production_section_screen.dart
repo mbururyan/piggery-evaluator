@@ -95,7 +95,6 @@ class _ProductionSectionScreenState extends State<ProductionSectionScreen> {
   @override
   Widget build(BuildContext context) {
     final filled = ProductionTemplate.kpis.where((k) => _value(k) != null).length;
-    final left = ProductionTemplate.kpis.length - filled;
     final score = ProductionTemplate.score(_payload, widget.visit.targets);
 
     return PopScope(
@@ -105,7 +104,10 @@ class _ProductionSectionScreenState extends State<ProductionSectionScreen> {
       child: SectionPage(
         section: _section,
         locked: _locked,
-        footerNote: left == 0 ? 'Score $score on target' : '$left left',
+        // "5 entered", not "4 left": every figure is optional (23 Nov).
+        footerNote: filled == 0
+            ? 'Fill in what the farmer knows'
+            : '$filled entered${score.of > 0 ? ' · $score on target' : ''}',
         onSaveAndNext: _locked
             ? null
             : () {

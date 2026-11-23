@@ -223,7 +223,7 @@ class _VisitCard extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             if (v.isDraft)
-              Text('Draft · ${v.doneCount}/${VisitSection.values.length}',
+              Text('Draft · ${v.startedCount}/${VisitSection.values.length}',
                   style: const TextStyle(
                       fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.amberText))
             else ...[

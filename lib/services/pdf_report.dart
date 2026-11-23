@@ -75,8 +75,25 @@ class PdfReport {
     }
   }
 
+  /// "MaryWanjiru-FarmVisit-2026-11-18.pdf" (20 Nov, Ryan): the farmer's
+  /// first two names run together, then the visit date year-first so a
+  /// folder of reports sorts by date.
   static String filenameFor(Visit v) =>
-      '${_slug(v.farmerName)}-${_isoDate(v.visitDate)}.pdf';
+      '${_namePart(v.farmerName)}-FarmVisit-${_isoDate(v.visitDate)}.pdf';
+
+  /// First two names, each capitalised, letters and digits only: spaces,
+  /// apostrophes (Wang'ombe) and the like are dropped because some phones
+  /// and mail apps mangle them in file names. Accented letters stay.
+  static String _namePart(String name) {
+    final words = name
+        .split(RegExp(r'\s+'))
+        .map((w) => w.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), ''))
+        .where((w) => w.isNotEmpty)
+        .take(2)
+        .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase());
+    final joined = words.join();
+    return joined.isEmpty ? 'Farmer' : joined;
+  }
 
   /// Build and open the share sheet. Works with no signal; only the
   /// sending (WhatsApp, email) needs one.
@@ -95,7 +112,7 @@ class PdfReport {
     final doc = pw.Document(
       theme: theme,
       title: '${v.farmerName} — farm visit report',
-      author: "Farmer's Choice · Pig Procurement",
+      author: "Farmer's Choice · Pig procurement",
     );
 
     doc.addPage(
@@ -135,7 +152,6 @@ class PdfReport {
           pw.SizedBox(height: 18),
           ..._production(v),
           ..._findings(v),
-          ..._intake(v),
           ..._recommendations(v),
         ],
       ),
@@ -237,7 +253,10 @@ class PdfReport {
 
     return pw.Row(children: [
       panel('TOTAL SCORE', '${sc.good} / ${sc.of}', _ink,
-          small: sc.pct == null ? null : '${sc.pct} %'),
+          // Out of the questions ANSWERED (23 Nov: anything can be
+          // skipped), and it says so, so a short visit can't pass for a
+          // full one.
+          small: sc.pct == null ? null : '${sc.pct} % · from ${sc.of} answered questions'),
       pw.SizedBox(width: 10),
       panel('RATING', rating?.label ?? '—', color,
           fill: _wash(color, 0.9), edge: _wash(color, 0.5)),
@@ -275,7 +294,7 @@ class PdfReport {
           cell('Sows', n('sows')),
           cell('Gilts', n('gilts')),
           cell('Boars', n('boars')),
-          cell('Ready for market', v.readyForMarket ?? 0),
+          // Ready for market left the form on 23 Nov.
         ]),
         pw.SizedBox(height: 10),
         _label('GROWING PIGS BY AGE (MONTHS)'),
@@ -295,6 +314,7 @@ class PdfReport {
               ),
             ),
         ]),
+        if (_remark(pop['remark']) case final r?) r,
       ]),
     );
   }
@@ -303,10 +323,14 @@ class PdfReport {
   /// "your farm vs the target" is the most useful line for the farmer.
   static List<pw.Widget> _production(Visit v) {
     final d = v.section(VisitSection.production);
-    if (d == null) return const [];
+    // Left out entirely when no figure was entered (23 Nov).
+    if (d == null || ProductionTemplate.entered(d) == 0) {
+      return [if (_remark(d?['remark']) case final r?) ...[_heading('Production figures'), r, pw.SizedBox(height: 16)]];
+    }
     final rows = <pw.Widget>[];
     for (final k in ProductionTemplate.kpis) {
       final value = d[k.id] as num?;
+      if (value == null) continue; // only the figures entered
       final target = v.targets[k.id];
       final meets = k.meets(value, target);
       rows.add(pw.Container(
@@ -345,6 +369,7 @@ class PdfReport {
       _sectionHeader('Your farm against the targets', v.scoreOf(VisitSection.production)),
       pw.SizedBox(height: 4),
       ...rows,
+      if (_remark(d['remark']) case final r?) r,
       pw.SizedBox(height: 16),
     ];
   }
@@ -360,23 +385,28 @@ class PdfReport {
       if (s == VisitSection.breeding) {
         final breed = d['breed'] as String?;
         final other = (d['breed_other'] as String?)?.trim();
+        // Only what was answered (23 Nov).
         rows = [
-          _finding('Breed',
-              breed == null ? '—' : (breed == 'Other' && (other ?? '').isNotEmpty ? other! : breed)),
+          if (breed != null)
+            _finding('Breed', breed == 'Other' && (other ?? '').isNotEmpty ? other! : breed),
           for (final r in BreedingTemplate.yesNoRows)
             if (d[r.$1] is bool)
               _finding(r.$2, d[r.$1] == true ? 'Yes' : 'No',
                   tone: d[r.$1] == true ? Tone.good : (r.$3 ? Tone.bad : Tone.warn)),
-          _finding('Highest parity', '${d['highest_parity'] ?? '—'}'),
+          if (d['highest_parity'] != null) _finding('Highest parity', '${d['highest_parity']}'),
         ];
       } else {
         final t = VisitTemplates.checklistFor(s);
-        if (t == null) continue; // production, population, intake: own blocks
+        if (t == null) continue; // production and population: own blocks
         rows = [
           for (final r in t.rows)
             if (t.optionFor(r, d[r.id]) case final o?) _finding(r.label, o.label, tone: o.tone),
         ];
       }
+      final remark = _remark(d['remark']);
+      // A section with nothing answered and no remark isn't on the report
+      // at all (23 Nov, Ryan): the farmer sees what was checked, only.
+      if (rows.isEmpty && remark == null) continue;
       if (out.isEmpty) {
         out.add(_heading('Findings by section'));
         out.add(pw.SizedBox(height: 8));
@@ -387,46 +417,11 @@ class PdfReport {
         _sectionHeader(s.label, v.scoreOf(s)),
         pw.SizedBox(height: 5),
         ...rows,
+        if (remark != null) remark,
         pw.SizedBox(height: 12),
       ]));
     }
     return out;
-  }
-
-  static List<pw.Widget> _intake(Visit v) {
-    final d = v.section(VisitSection.intake);
-    if (d == null) return const [];
-    final months = IntakeTemplate.monthsOf(d) ?? const <String, dynamic>{};
-    final planned = [
-      for (final m in IntakeTemplate.monthsFrom(v.visitDate))
-        if ((months[IntakeTemplate.keyOf(m)] as num? ?? 0) > 0)
-          (m, (months[IntakeTemplate.keyOf(m)] as num).toInt()),
-    ];
-    return [
-      _heading('Planned deliveries to FCL'),
-      pw.SizedBox(height: 7),
-      if (planned.isEmpty)
-        pw.Text('None planned in the next 12 months',
-            style: const pw.TextStyle(fontSize: 9.5, color: _muted))
-      else
-        pw.Wrap(spacing: 5, runSpacing: 5, children: [
-          for (final p in planned)
-            pw.Container(
-              width: 60,
-              padding: const pw.EdgeInsets.symmetric(vertical: 5),
-              decoration: pw.BoxDecoration(color: _tint, borderRadius: pw.BorderRadius.circular(3)),
-              child: pw.Column(children: [
-                pw.Text(_month(p.$1), style: const pw.TextStyle(fontSize: 8, color: _muted)),
-                pw.Text('${p.$2}',
-                    style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-              ]),
-            ),
-        ]),
-      pw.SizedBox(height: 5),
-      pw.Text('${v.intakeTotal} pigs over the next 12 months',
-          style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold)),
-      pw.SizedBox(height: 16),
-    ];
   }
 
   static List<pw.Widget> _recommendations(Visit v) {
@@ -437,7 +432,7 @@ class PdfReport {
     };
     final review = v.lastRecsReview.where((r) => r.outcome != null).toList();
     final recs = v.recommendations;
-    if (review.isEmpty && recs.isEmpty && v.followUpNeeded != true) return const [];
+    if (review.isEmpty && recs.isEmpty) return const [];
 
     return [
       if (review.isNotEmpty) ...[
@@ -469,17 +464,33 @@ class PdfReport {
               child: pw.Text('${i + 1}.  ${recs[i]}',
                   style: const pw.TextStyle(fontSize: 11, lineSpacing: 2.5)),
             ),
-          if (v.followUpNeeded == true && v.followUpBy != null) ...[
-            pw.SizedBox(height: 6),
-            pw.Text('Next visit planned by ${Formatters.date(v.followUpBy)}',
-                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-          ],
         ]),
       ),
     ];
   }
 
   // --- pieces ---------------------------------------------------------
+
+  /// The EO's remark for a section, in a grey band under it (20 Nov:
+  /// remarks print on the farmer's report, and the app's remark boxes say
+  /// so). Null when there's none, so empty sections stay compact.
+  static pw.Widget? _remark(Object? text) {
+    final t = (text is String) ? text.trim() : '';
+    if (t.isEmpty) return null;
+    return pw.Container(
+      width: double.infinity,
+      margin: const pw.EdgeInsets.only(top: 6),
+      padding: const pw.EdgeInsets.fromLTRB(8, 5, 8, 5),
+      decoration: pw.BoxDecoration(color: _tint, borderRadius: pw.BorderRadius.circular(3)),
+      child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Text('REMARK',
+            style: pw.TextStyle(
+                fontSize: 7, letterSpacing: 0.9, color: _muted, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(width: 8),
+        pw.Expanded(child: pw.Text(t, style: const pw.TextStyle(fontSize: 9.5, lineSpacing: 1.5))),
+      ]),
+    );
+  }
 
   /// Section name, a bar filled to the score, and "4 / 5". The bar is one
   /// proportional strip because sections have different question counts.
@@ -560,19 +571,7 @@ class PdfReport {
 
   static String _num(num v) => v == v.roundToDouble() ? v.toInt().toString() : v.toString();
 
-  static const _mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  static String _month(DateTime m) =>
-      '${_mon[m.month - 1]} ${(m.year % 100).toString().padLeft(2, '0')}';
-
   static String _isoDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  static String _slug(String s) {
-    final cleaned = s
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-        .replaceAll(RegExp(r'^-+|-+$'), '');
-    return cleaned.isEmpty ? 'visit' : cleaned;
-  }
 }
