@@ -48,6 +48,9 @@ class FarmerSummary {
     this.lastEoName,
     this.visitCount = 0,
     this.sows,
+    this.growing,
+    this.gilts,
+    this.boars,
     this.scorePct,
   });
 
@@ -60,16 +63,33 @@ class FarmerSummary {
   /// inside the age bands is still an open question.
   final int? sows;
 
+  /// The age bands added up (0–1 … 7+ months), as the function wrote it.
+  final int? growing;
+  final int? gilts;
+  final int? boars;
+
   /// The latest visit's score, 0–100.
   final int? scorePct;
 
+  /// Every pig on the farm at the latest visit, for Analytics' "Top
+  /// farms". Null when the summary has no population at all; a farm
+  /// with no number for one of the four parts still adds up the others.
+  int? get totalPigs {
+    final parts = [growing, sows, gilts, boars].whereType<int>();
+    return parts.isEmpty ? null : parts.fold<int>(0, (a, b) => a + b);
+  }
+
   factory FarmerSummary.fromMap(Map<String, dynamic> m) {
     final pop = m['population'] as Map<String, dynamic>?;
+    int? count(String k) => (pop?[k] as num?)?.toInt();
     return FarmerSummary(
       lastVisitDate: (m['last_visit_date'] as Timestamp?)?.toDate(),
       lastEoName: m['last_eo_name'] as String?,
       visitCount: (m['visit_count'] as num?)?.toInt() ?? 0,
-      sows: (pop?['sows'] as num?)?.toInt(),
+      sows: count('sows'),
+      growing: count('growing'),
+      gilts: count('gilts'),
+      boars: count('boars'),
       scorePct: (m['score_pct'] as num?)?.toInt(),
     );
   }
