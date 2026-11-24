@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 import 'auth_service.dart';
+import 'due_visits.dart';
 import 'sync_service.dart';
 
 /// The signed-in user, as this phone knows them.
@@ -87,6 +88,8 @@ class SessionService {
     // Start watching for unsynced work as soon as we know who's signed in,
     // even if the profile read above failed: pending writes matter either way.
     SyncService.instance.start(user.uid);
+    // Who's due for a visit, for the dot on ☰ and the drawer count.
+    DueVisitsService.instance.start(user.uid);
 
     // Tag crash reports with who was using the phone, so "James's app
     // crashed" can be found. uid and username only: no names or phone
@@ -102,6 +105,7 @@ class SessionService {
   void clear() {
     _profile = null;
     SyncService.instance.stop();
+    DueVisitsService.instance.stop();
     // The next person to sign in on this phone gets their own reports.
     FirebaseCrashlytics.instance.setUserIdentifier('');
   }

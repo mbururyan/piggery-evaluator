@@ -2,8 +2,10 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 
 import '../constants/app_info.dart';
+import '../screens/due_visits_screen.dart';
 import '../screens/login_screen.dart';
 import '../services/auth_service.dart';
+import '../services/due_visits.dart';
 import '../services/session_service.dart';
 import '../services/sync_service.dart';
 import '../theme/app_theme.dart';
@@ -241,6 +243,39 @@ class AppDrawer extends StatelessWidget {
                   _showSyncSheet(context);
                 },
               ),
+            ),
+            // Due for a visit, with an orange count when anyone is
+            // overdue (the same number that puts the dot on ☰).
+            ValueListenableBuilder<DueVisits?>(
+              valueListenable: DueVisitsService.instance.due,
+              builder: (context, due, _) {
+                final n = due?.overdue.length ?? 0;
+                return ListTile(
+                  leading: const Icon(Icons.event_repeat_outlined,
+                      size: 20, color: AppColors.muted),
+                  title: const Text('Due for a visit',
+                      style: TextStyle(fontSize: 14, color: AppColors.ink)),
+                  trailing: n == 0
+                      ? null
+                      : Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.alertTint,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text('$n',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.alert)),
+                        ),
+                  onTap: () {
+                    Navigator.of(context).pop(); // close the drawer first
+                    Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const DueVisitsScreen()));
+                  },
+                );
+              },
             ),
             _item(context,
                 icon: Icons.description_outlined, label: 'My reports'),

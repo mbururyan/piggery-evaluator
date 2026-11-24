@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/visit.dart';
+import '../../services/due_visits.dart';
 import '../../services/session_service.dart';
 import '../../services/visit_service.dart';
 import '../../theme/app_theme.dart';
@@ -50,10 +51,21 @@ class HomeTab extends StatelessWidget {
               // which Scaffold.of() needs to find the drawer. Home's own
               // context sits above it and would fail.
               Builder(
-                builder: (ctx) => IconButton(
-                  tooltip: 'Menu',
-                  icon: const Icon(Icons.menu, color: AppColors.muted),
-                  onPressed: () => Scaffold.of(ctx).openDrawer(),
+                builder: (ctx) => ValueListenableBuilder<DueVisits?>(
+                  valueListenable: DueVisitsService.instance.due,
+                  builder: (context, due, _) => IconButton(
+                    tooltip: 'Menu',
+                    // An orange dot when farmers are overdue for a visit:
+                    // the reason to open the drawer. Farmers with no visit
+                    // on record don't count, or it would always be on.
+                    icon: Badge(
+                      isLabelVisible: (due?.overdue.length ?? 0) > 0,
+                      smallSize: 9,
+                      backgroundColor: AppColors.alert,
+                      child: const Icon(Icons.menu, color: AppColors.muted),
+                    ),
+                    onPressed: () => Scaffold.of(ctx).openDrawer(),
+                  ),
                 ),
               ),
             ],
