@@ -51,6 +51,7 @@ class FarmerSummary {
     this.growing,
     this.gilts,
     this.boars,
+    this.bands = const {},
     this.scorePct,
   });
 
@@ -67,6 +68,11 @@ class FarmerSummary {
   final int? growing;
   final int? gilts;
   final int? boars;
+
+  /// The latest visit's count per age band, keyed like
+  /// PopulationTemplate.bands (m0_1 … m7p), for the Projections page.
+  /// Empty for summaries written before 25 Nov, until the backfill runs.
+  final Map<String, int> bands;
 
   /// The latest visit's score, 0–100.
   final int? scorePct;
@@ -90,6 +96,10 @@ class FarmerSummary {
       growing: count('growing'),
       gilts: count('gilts'),
       boars: count('boars'),
+      bands: {
+        for (final e in ((pop?['bands'] as Map?) ?? const {}).entries)
+          if (e.value is num) e.key as String: (e.value as num).toInt(),
+      },
       scorePct: (m['score_pct'] as num?)?.toInt(),
     );
   }

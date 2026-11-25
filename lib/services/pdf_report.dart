@@ -342,7 +342,7 @@ class PdfReport {
           pw.SizedBox(
             width: 80,
             child: pw.Text(
-              value == null ? '—' : '${_num(value)} ${k.unit}',
+              '${_num(value)} ${k.unit}',
               textAlign: pw.TextAlign.right,
               style: pw.TextStyle(
                   fontSize: 9.5,

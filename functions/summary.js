@@ -55,6 +55,11 @@ export function buildSummary(visits) {
           sows: num(pop.sows),
           gilts: num(pop.gilts),
           boars: num(pop.boars),
+          // Each age band as counted, for the app's Projections page: it
+          // moves every band forward from this visit's date. Kept here
+          // because the phone only caches its EO's own visits, and a
+          // farmer's latest visit may be a predecessor's or a paper one.
+          bands: Object.fromEntries(BANDS.map((k) => [k, num(pop[k])])),
         }
       : null,
   };

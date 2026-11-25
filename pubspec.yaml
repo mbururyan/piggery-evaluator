@@ -46,6 +46,8 @@ dependencies:
   pdf: ^3.13.0
   printing: ^5.15.0
   firebase_crashlytics: ^6.1.0
+  excel_plus: ^2.29.3
+  share_plus: ^13.3.1
 
 dev_dependencies:
   flutter_test:
