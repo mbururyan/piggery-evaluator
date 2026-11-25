@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_info.dart';
 import '../screens/due_visits_screen.dart';
 import '../screens/login_screen.dart';
+import '../screens/my_reports_screen.dart';
 import '../screens/projections_screen.dart';
 import '../services/auth_service.dart';
 import '../services/due_visits.dart';
@@ -288,8 +289,16 @@ class AppDrawer extends StatelessWidget {
                     MaterialPageRoute(builder: (_) => const ProjectionsScreen()));
               },
             ),
-            _item(context,
-                icon: Icons.description_outlined, label: 'My reports'),
+            _item(
+              context,
+              icon: Icons.description_outlined,
+              label: 'FV Reports (PDF)',
+              onTap: () {
+                Navigator.of(context).pop(); // close the drawer first
+                Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const MyReportsScreen()));
+              },
+            ),
             _item(
               context,
               icon: Icons.info_outline,
